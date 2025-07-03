@@ -11,6 +11,15 @@ This project provides a minimal React template with a clean, modern UI and minim
 
 ## Getting Started
 
+### Configuration
+
+You can set the backend API base URL using a `.env` file at the project root (see [.env](./.env)).  
+For example, to point to local dev backend:
+```
+REACT_APP_API_BASE=http://localhost:3001
+```
+If unset, the frontend will auto-detect a reasonable default depending on hosting.
+
 In the project directory, you can run:
 
 ### `npm start`

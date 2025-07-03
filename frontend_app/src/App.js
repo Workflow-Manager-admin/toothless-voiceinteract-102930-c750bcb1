@@ -14,15 +14,16 @@ import axios from "axios";
  */
 const TOOTHLESS_MODEL_URL = "/models/toothless.glb";
 
-// BACKEND endpoints (using /gemini and /speak for newer API pattern)
+// BACKEND endpoints (configurable with .env REACT_APP_API_BASE; fallback to localhost)
 const API_BASE =
-  window.location.hostname === "localhost"
+  process.env.REACT_APP_API_BASE ||
+  (window.location.hostname === "localhost"
     ? "http://localhost:3001"
-    : "https://vscode-internal-6807-beta.beta01.cloud.kavia.ai:3001";
+    : "https://vscode-internal-6807-beta.beta01.cloud.kavia.ai:3001");
 
-// New endpoints as per requirements
-const GEMINI_API = `${API_BASE}/gemini`;
-const SPEAK_API = `${API_BASE}/speak`;
+// Use new unified endpoints
+const CHAT_API = `${API_BASE}/chat`;   // Receives prompt, returns AI response
+const SPEAK_API = `${API_BASE}/speak`; // Receives text, returns TTS audio
 
 const THEME = {
   accent: "#e09e38",
@@ -67,16 +68,17 @@ function App() {
   // PUBLIC_INTERFACE
   /**
    * Sends the user's message to backend, gets AI reply, updates chat, and plays TTS.
+   * Uses /chat endpoint for chat and /speak endpoint for TTS, with .env-configurable base.
    */
   async function sendMessage(msgText, isVoice = false) {
     setLoading(true);
     setMessages(msgs => [...msgs, { role: "user", text: msgText }]);
-    // Call Gemini backend endpoint
+    // Call /chat backend endpoint for AI reply
     let aiText = "";
     let aiMsgIdx = null;
     try {
       const response = await axios.post(
-        GEMINI_API,
+        CHAT_API,
         {
           prompt: msgText,
           chat_history: [
@@ -98,7 +100,7 @@ function App() {
     setMessages(msgs => [...msgs, { role: "ai", text: aiText }]);
     setAISpeakingIdx(aiMsgIdx);
 
-    // Send AI reply to ElevenLabs via backend TTS endpoint, fetch audio, then play
+    // Send AI reply to backend /speak endpoint for TTS (get audio, play)
     let ttsAudioUrl = "";
     try {
       const ttsRes = await axios.post(
