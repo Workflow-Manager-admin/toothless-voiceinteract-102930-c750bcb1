@@ -142,7 +142,10 @@ function App() {
       </header>
       <main className="main-content">
         <div className="model-panel">
-          <ToothlessModel modelUrl={TOOTHLESS_MODEL_URL} />
+          <ToothlessModel
+            modelUrl={TOOTHLESS_MODEL_URL}
+            isSpeaking={typeof aiSpeakingIdx === "number" && audioUrl}
+          />
         </div>
         <section className="chat-section">
           <ChatBox messages={messages} speakingIdx={aiSpeakingIdx} />

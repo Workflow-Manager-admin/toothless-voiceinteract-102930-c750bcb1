@@ -1,5 +1,5 @@
-import React, { Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
+import React, { Suspense, useEffect, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 
 /**
@@ -46,11 +46,17 @@ function ToothlessLighting() {
   );
 }
 
-// PUBLIC_INTERFACE
-export default function ToothlessModel({ modelUrl, ...props }) {
+/**
+ * PUBLIC_INTERFACE
+ * ToothlessModel React component
+ * Adds optional subtle talking animation synced to ElevenLabs audio playback.
+ * Accepts prop isSpeaking (boolean) to indicate if Toothless should animate mouth.
+ */
+export default function ToothlessModel({ modelUrl, isSpeaking = false, ...props }) {
   /**
    * 3D viewer for Toothless .glb model using react-three-fiber and drei.
    * @param {string} modelUrl - Path or URL to toothless's .glb model.
+   * @param {boolean} isSpeaking - Whether Toothless should animate talking
    */
   return (
     <div className="toothless-viewer" {...props}>
@@ -61,7 +67,7 @@ export default function ToothlessModel({ modelUrl, ...props }) {
       >
         <ToothlessLighting />
         <Suspense fallback={null}>
-          <ToothlessGLTF modelUrl={modelUrl} />
+          <ToothlessGLTF modelUrl={modelUrl} isSpeaking={isSpeaking} />
         </Suspense>
         <OrbitControls
           enablePan={false}
@@ -75,11 +81,75 @@ export default function ToothlessModel({ modelUrl, ...props }) {
 }
 
 // PUBLIC_INTERFACE
-function ToothlessGLTF({ modelUrl }) {
+/**
+ * Loads the Toothless .glb model asset and applies "talking" animation if isSpeaking is true.
+ * If the inner mesh is not found, applies fallback head bob instead.
+ */
+function ToothlessGLTF({ modelUrl, isSpeaking }) {
   /**
    * Loads the Toothless .glb model asset.
    * @param {string} modelUrl - URL to .glb file
+   * @param {boolean} isSpeaking - Whether Toothless should animate talking
    */
   const { scene } = useGLTF(modelUrl);
+  const [mouthNode, setMouthNode] = useState(null);
+  const [modelRoot, setModelRoot] = useState(null);
+  const mouthAnimProgress = useRef(0);
+  const speed = 3.5 + Math.random(); // randomizes talking speed a little
+
+  // Try to find mouth or jaw node once model is loaded
+  useEffect(() => {
+    if (!scene) return;
+
+    // Try to find nodes likely to be the jaw/mouth by common names, fallback to null
+    let foundMouth = null;
+    scene.traverse((node) => {
+      if (!foundMouth && node.name) {
+        const lowerName = node.name.toLowerCase();
+        if (
+          lowerName.includes("mouth") ||
+          lowerName.includes("jaw") ||
+          lowerName.includes("open") ||
+          lowerName.includes("lip")
+        ) {
+          foundMouth = node;
+        }
+      }
+    });
+    setMouthNode(foundMouth || null);
+    setModelRoot(scene);
+  }, [scene]);
+
+  // Animate mouth or, if not found, bob the head root
+  useFrame((state, delta) => {
+    // Animation only runs when isSpeaking is true
+    if (!modelRoot) return;
+
+    // Subtle smooth animation: open/close at approx syllabic talking speed
+    if (isSpeaking) {
+      mouthAnimProgress.current += delta * (2.2 + Math.sin(state.clock.getElapsedTime() * 0.7));
+
+      // Animate mouth node if present (vertical rotation)
+      if (mouthNode) {
+        // Range: clamp between closed (0) to open (~0.4 radians)
+        const openAmount =
+          0.15 + 0.11 * Math.abs(Math.sin(mouthAnimProgress.current * speed));
+        mouthNode.rotation.x = -openAmount; // negative so mouth/jaw opens downward
+      } else if (modelRoot) {
+        // Fallback: bob the whole model's head up/down slightly
+        modelRoot.position.y = -0.3 + 0.04 * Math.sin(mouthAnimProgress.current * (speed * 0.8));
+        modelRoot.rotation.x = 0.03 * Math.sin(mouthAnimProgress.current * (speed * 0.5));
+      }
+    } else {
+      // Reset to default pose when not speaking
+      if (mouthNode) mouthNode.rotation.x = 0;
+      if (modelRoot) {
+        modelRoot.position.y = -0.3;
+        modelRoot.rotation.x = 0;
+      }
+    }
+  });
+
+  // Model is always scaled and positioned the same on load
   return <primitive object={scene} scale={1.7} position={[0, -0.3, 0]} />;
 }
