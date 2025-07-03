@@ -7,16 +7,22 @@ import ChatBox from "./components/ChatBox";
 import TextInput from "./components/TextInput";
 import axios from "axios";
 
-// Toothless 3D .glb asset URL (for now, use online file. Place local if available in public/)
-const TOOTHLESS_MODEL_URL =
-  "https://cdn.jsdelivr.net/gh/benjaminnicholasloftus/toothless-glb-sample@main/toothless.glb";
+/**
+ * Toothless 3D .glb asset (local in /public/models/toothless.glb).
+ * For vite/cra/react-scripts, public/ is mounting point for static.
+ * Accessible in production and dev as "/models/toothless.glb"
+ */
+const TOOTHLESS_MODEL_URL = "/models/toothless.glb";
 
-// BACKEND endpoints (change URL if using proxy or for prod)
+// BACKEND endpoints (using /gemini and /speak for newer API pattern)
 const API_BASE =
   window.location.hostname === "localhost"
     ? "http://localhost:3001"
     : "https://vscode-internal-6807-beta.beta01.cloud.kavia.ai:3001";
 
+// New endpoints as per requirements
+const GEMINI_API = `${API_BASE}/gemini`;
+const SPEAK_API = `${API_BASE}/speak`;
 
 const THEME = {
   accent: "#e09e38",
@@ -46,6 +52,9 @@ function useThemeCSS() {
 }
 
 // PUBLIC_INTERFACE
+/**
+ * Main app entrypoint: handles state, model loading, chat, TTS playback, and all interactions.
+ */
 function App() {
   useThemeCSS();
   const [messages, setMessages] = useState([
@@ -56,32 +65,44 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   // PUBLIC_INTERFACE
+  /**
+   * Sends the user's message to backend, gets AI reply, updates chat, and plays TTS.
+   */
   async function sendMessage(msgText, isVoice = false) {
     setLoading(true);
     setMessages(msgs => [...msgs, { role: "user", text: msgText }]);
-    // Call Gemini Pro backend
+    // Call Gemini backend endpoint
     let aiText = "";
     let aiMsgIdx = null;
     try {
-      const response = await axios.post(`${API_BASE}/api/ai-chat`, {
-        prompt: msgText,
-        chat_history: messages
-          .filter(m => m.role !== "ai" || m.text.trim() !== "")
-          .map(m => ({ role: m.role, content: m.text })),
-      });
+      const response = await axios.post(
+        GEMINI_API,
+        {
+          prompt: msgText,
+          chat_history: [
+            ...messages,
+            { role: "user", text: msgText }
+          ].filter(m => m.role && m.text && m.text.trim() !== "")
+            .map(m => ({
+              role: m.role === "ai" ? "assistant" : m.role, // 'user' or 'assistant'
+              content: m.text
+            }))
+        }
+      );
       aiText = response?.data?.reply || "Sorry, Toothless couldn't reply.";
     } catch (e) {
       aiText = "Network error: can't reach Toothless!";
     }
-    aiMsgIdx = messages.length + 1; // after user+ previous ai msgs
+
+    aiMsgIdx = messages.length + 1;
     setMessages(msgs => [...msgs, { role: "ai", text: aiText }]);
     setAISpeakingIdx(aiMsgIdx);
 
-    // Fetch TTS only for last ai message
+    // Send AI reply to ElevenLabs via backend TTS endpoint, fetch audio, then play
     let ttsAudioUrl = "";
     try {
       const ttsRes = await axios.post(
-        `${API_BASE}/api/tts-speak`,
+        SPEAK_API,
         { text: aiText },
         { responseType: "blob" }
       );
